@@ -30,10 +30,9 @@ COMPETITION_NAME_CANDIDATES = os.environ.get(
 SEARCH_BUTTON_HINTS = os.environ.get("SEARCH_BUTTON_HINTS", "조회,검색").split(",")
 
 # 사이트에는 팀별 필터가 없고 K리그2 전체 선수 표만 제공됨.
-# 그 표에서 구단명(팀명) 열 값이 아래 후보 중 하나와 일치하는 행만 남긴다.
-# 사이트에 표시되는 정확한 표기로 맞춰주세요.
-# (예: "서울이랜드FC", "서울 이랜드", "서울이랜드" 등 사이트마다 표기가 다를 수 있음)
-TEAM_NAME_CANDIDATES = ["서울이랜드FC", "서울 이랜드 FC", "서울이랜드", "서울 이랜드"]
+# 그 표에서 "구단" 열 값이 아래 후보 중 하나와 일치하는 행만 남긴다.
+# 실제 사이트 표기는 "서울 이랜드" (사용자 확인).
+TEAM_NAME_CANDIDATES = ["서울 이랜드", "서울이랜드FC", "서울 이랜드 FC", "서울이랜드"]
 
 # 전체 선수 표가 여러 페이지에 걸쳐 나오는 경우(페이지네이션) 다음 페이지 버튼을 찾기 위한 힌트.
 PAGINATION_NEXT_HINTS = ["다음", "Next", "next", ">"]
@@ -45,7 +44,7 @@ MAX_PAGES = 50
 # 실제 사이트 헤더 텍스트를 확인해서 추가/수정하세요.
 COLUMN_HEADER_HINTS = {
     "player_name": ["선수명", "선수", "이름"],
-    "team_name": ["팀명", "소속팀", "팀"],
+    "team_name": ["구단", "팀명", "소속팀", "팀"],
     "position": ["포지션"],
     "xg": ["기대득점", "xG", "XG"],
     "goals": ["득점", "골"],
