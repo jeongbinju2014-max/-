@@ -184,14 +184,36 @@ def find_stats_table(page: Page):
 
 
 def map_headers(header_texts):
-    """실제 헤더 텍스트 -> 표준 필드명 매핑."""
+    """실제 헤더 텍스트 -> 표준 필드명 매핑.
+
+    "xG", "득점/xG", "90분당 xG"처럼 한 열의 텍스트가 다른 열 힌트의 부분
+    문자열이 되는 경우가 있어(예: "90분당 xG"에도 "xG"가 들어 있음), 정확히
+    일치하는 열을 먼저 배정하고 남은 열에만 부분 일치를 적용한다.
+    """
+    stripped = [t.strip() for t in header_texts]
     mapping = {}
-    for idx, text in enumerate(header_texts):
-        text = text.strip()
+    assigned_fields = set()
+
+    for idx, text in enumerate(stripped):
         for field, hints in config.COLUMN_HEADER_HINTS.items():
+            if field in assigned_fields:
+                continue
+            if text in hints:
+                mapping[idx] = field
+                assigned_fields.add(field)
+                break
+
+    for idx, text in enumerate(stripped):
+        if idx in mapping:
+            continue
+        for field, hints in config.COLUMN_HEADER_HINTS.items():
+            if field in assigned_fields:
+                continue
             if any(hint in text for hint in hints):
                 mapping[idx] = field
+                assigned_fields.add(field)
                 break
+
     return mapping
 
 
