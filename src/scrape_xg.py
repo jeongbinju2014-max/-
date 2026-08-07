@@ -1,7 +1,11 @@
-"""K리그 데이터포탈에서 서울 이랜드 FC 선수들의 xG 기록을 수집해 CSV로 저장한다.
+"""K리그 데이터포탈에서 K리그2 전체 선수 xG 표를 수집한 뒤,
+구단명이 서울 이랜드 FC인 행만 걸러 CSV로 저장한다.
 
-주의: 정확한 페이지 URL / 팀 필터 UI / 표 헤더는 사이트를 직접 열어 확인해야 한다.
-README.md의 "1단계: 사이트 구조 확인"을 먼저 진행할 것.
+사이트에는 팀별 필터가 없고 전체 선수 표만 제공되므로, 필요하면 페이지를
+넘겨가며(pagination) 모든 선수를 모은 뒤 마지막에 구단명으로 필터링한다.
+
+주의: 정확한 페이지 URL / 표 헤더 / 페이지네이션 UI는 사이트를 직접 열어
+확인해야 한다. README.md의 "1단계: 사이트 구조 확인"을 먼저 진행할 것.
 """
 import csv
 import datetime
@@ -12,31 +16,23 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sy
 import config
 
 
-def select_team(page: Page) -> bool:
-    """팀 필터에서 서울 이랜드 FC를 선택 시도. 성공하면 True."""
-    for team_name in config.TEAM_NAME_CANDIDATES:
-        # 1) <select> 드롭다운에 팀명이 옵션으로 있는 경우
-        for select_el in page.locator("select").all():
-            try:
-                options = select_el.locator("option").all_inner_texts()
-            except Exception:
+def click_next_page(page: Page) -> bool:
+    """다음 페이지 버튼 클릭을 시도. 성공하면 True, 더 이상 없으면 False."""
+    for hint in config.PAGINATION_NEXT_HINTS:
+        locator = page.locator(f"a:has-text('{hint}'), button:has-text('{hint}')")
+        if locator.count() == 0:
+            continue
+        candidate = locator.first
+        try:
+            class_attr = candidate.get_attribute("class") or ""
+            aria_disabled = candidate.get_attribute("aria-disabled")
+            if "disabled" in class_attr.lower() or aria_disabled == "true":
                 continue
-            if any(team_name in opt for opt in options):
-                select_el.select_option(label=[o for o in options if team_name in o][0])
-                page.wait_for_load_state("networkidle")
-                return True
-
-        # 2) 버튼/링크 형태로 팀명이 노출된 경우
-        locator = page.get_by_text(team_name, exact=False)
-        if locator.count() > 0:
-            try:
-                locator.first.click()
-                page.wait_for_load_state("networkidle")
-                return True
-            except Exception:
-                continue
-
-    print("[경고] 팀 필터를 자동으로 찾지 못했습니다. 전체 선수 표에서 팀명으로 필터링합니다.")
+            candidate.click()
+            page.wait_for_load_state("networkidle")
+            return True
+        except Exception:
+            continue
     return False
 
 
@@ -83,16 +79,25 @@ def extract_rows(table, header_mapping, header_texts):
 
 
 def filter_team(rows):
+    """구단명(team_name) 열 값으로 서울 이랜드 FC 소속 선수만 남긴다."""
     if not rows or "team_name" not in rows[0]:
+        print("[경고] 구단명 열을 찾지 못해 팀 필터링을 건너뜁니다. "
+              "config.COLUMN_HEADER_HINTS['team_name']을 확인해주세요.")
         return rows
     filtered = [
         r for r in rows
         if any(team in r.get("team_name", "") for team in config.TEAM_NAME_CANDIDATES)
     ]
-    return filtered if filtered else rows
+    if not filtered:
+        print("[경고] 서울 이랜드 FC와 일치하는 행이 없습니다. "
+              "config.TEAM_NAME_CANDIDATES의 표기를 실제 사이트 값에 맞게 조정해주세요.")
+    return filtered
 
 
 def main():
+    all_rows = []
+    seen_signatures = set()
+
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -102,24 +107,34 @@ def main():
         except PlaywrightTimeoutError:
             print("[경고] networkidle 대기 타임아웃, 계속 진행합니다.")
 
-        team_selected = select_team(page)
+        for page_num in range(1, config.MAX_PAGES + 1):
+            table, header_texts = find_stats_table(page)
+            if table is None:
+                print("[오류] 표를 찾지 못했습니다. URL/페이지 구조를 다시 확인해주세요.")
+                browser.close()
+                sys.exit(1)
 
-        table, header_texts = find_stats_table(page)
-        if table is None:
-            print("[오류] 표를 찾지 못했습니다. URL/페이지 구조를 다시 확인해주세요.")
-            browser.close()
-            sys.exit(1)
+            header_mapping = map_headers(header_texts)
+            rows = extract_rows(table, header_mapping, header_texts)
+            signature = tuple(tuple(sorted(r.items())) for r in rows)
 
-        header_mapping = map_headers(header_texts)
-        rows = extract_rows(table, header_mapping, header_texts)
+            if not rows or signature in seen_signatures:
+                print(f"[정보] {page_num}페이지에서 새 데이터가 없어 수집을 종료합니다.")
+                break
 
-        if not team_selected:
-            rows = filter_team(rows)
+            seen_signatures.add(signature)
+            all_rows.extend(rows)
+            print(f"[정보] {page_num}페이지에서 {len(rows)}행 수집 (누적 {len(all_rows)}행)")
+
+            if not click_next_page(page):
+                break
 
         browser.close()
 
+    rows = filter_team(all_rows)
+
     if not rows:
-        print("[오류] 추출된 선수 데이터가 없습니다.")
+        print("[오류] 서울 이랜드 FC 선수 데이터를 찾지 못했습니다.")
         sys.exit(1)
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
