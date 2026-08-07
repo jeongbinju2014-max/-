@@ -16,6 +16,29 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sy
 import config
 
 
+def collect_clickable_texts(page: Page, limit: int = 80):
+    """현재 화면에서 클릭 가능해 보이는 요소들의 글자를 모아 디버깅에 쓴다."""
+    texts = []
+    seen = set()
+    for sel in ["nav a", "nav button", "header a", "header button",
+                "[role='menuitem']", "a", "button", "li"]:
+        try:
+            elements = page.locator(sel).all()
+        except Exception:
+            continue
+        for el in elements:
+            try:
+                t = el.inner_text(timeout=300).strip()
+            except Exception:
+                continue
+            if t and 1 <= len(t) <= 20 and t not in seen:
+                seen.add(t)
+                texts.append(t)
+            if len(texts) >= limit:
+                return texts
+    return texts
+
+
 def click_menu_path(page: Page, menu_path) -> bool:
     """SPA 메뉴를 순서대로 클릭해 목표 화면까지 이동한다. 실패하면 False."""
     for label in menu_path:
@@ -130,13 +153,22 @@ def main():
             page.goto(config.KLEAGUE_BASE_URL, wait_until="networkidle", timeout=30000)
         except PlaywrightTimeoutError:
             print("[경고] networkidle 대기 타임아웃, 계속 진행합니다.")
+        page.wait_for_timeout(2000)
 
         if not click_menu_path(page, config.MENU_CLICK_PATH):
             page.screenshot(path="data/debug_screenshot.png", full_page=True)
+            texts = collect_clickable_texts(page)
+            with open("data/debug_menu_texts.txt", "w", encoding="utf-8") as f:
+                f.write(f"URL: {page.url}\nTitle: {page.title()}\n\n")
+                f.write("\n".join(texts))
             print(
                 "[오류] 메뉴 이동에 실패했습니다. data/debug_screenshot.png를 확인하거나 "
                 "config.MENU_CLICK_PATH를 실제 메뉴 텍스트에 맞게 수정해주세요."
             )
+            print(f"[정보] 페이지 제목: {page.title()} / 현재 URL: {page.url}")
+            print("[정보] 현재 화면에서 인식된 클릭 가능한 글자들(이 목록을 그대로 복사해서 알려주세요):")
+            for t in texts:
+                print(f"  - {t}")
             browser.close()
             sys.exit(1)
 
