@@ -1,0 +1,30 @@
+name: Update Seoul E-Land xG Google Sheet
+
+on:
+  schedule:
+    # 매일 00:00 UTC = KST 09:00
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  update-sheet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Run scrape + sheet update
+        env:
+          KLEAGUE_STATS_URL: ${{ secrets.KLEAGUE_STATS_URL }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_WORKSHEET_NAME: ${{ vars.GOOGLE_WORKSHEET_NAME }}
+        run: python src/run_all.py
