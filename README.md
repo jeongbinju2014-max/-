@@ -1,6 +1,6 @@
 # 서울 이랜드 FC xG 데이터 → 구글시트 자동 업데이트
 
-한국프로축구연맹 K리그 데이터포탈(`data.kleague.com`, 경로: 데이터 센터 → 부가기록 →
+한국프로축구연맹 K리그 데이터포탈(`data.kleague.com`, 경로: 데이터센터 → 부가기록 →
 기대득점 → 선수별 기대득점)에서 서울 이랜드 FC 소속 선수들의 xG(기대득점, Expected Goals)
 기록을 가져와 구글시트에 자동으로 업데이트하는 도구입니다.
 
@@ -14,7 +14,7 @@
 환경에서는 어떤 방법으로도(직접 접속, 웹 조회 도구 모두 403) 실제 페이지에 접근하지
 못했습니다. 확인된 사실은 다음과 같습니다.
 
-- 사이트는 **SPA**라서 "데이터 센터 → 부가기록 → 기대득점 → 선수별 기대득점" 메뉴를
+- 사이트는 **SPA**라서 "데이터센터 → 부가기록 → 기대득점 → 선수별 기대득점" 메뉴를
   눌러도 주소창 URL은 바뀌지 않는다 (사용자 확인).
 - 그래서 스크립트는 기본 URL(`https://data.kleague.com/`)로 접속한 뒤,
   이 메뉴 경로를 **순서대로 자동 클릭**해서 화면에 도달하도록 만들어져 있다
@@ -30,7 +30,7 @@
 
 ```
 data.kleague.com 접속 (Playwright)
-        │  메뉴 자동 클릭: 데이터 센터 → 부가기록 → 기대득점 → 선수별 기대득점
+        │  메뉴 자동 클릭: 데이터센터 → 부가기록 → 기대득점 → 선수별 기대득점
         ▼
 K리그2 전체 선수 xG 표를 페이지네이션 따라가며 전부 수집
         │
@@ -46,10 +46,10 @@ gspread(Google Sheets API)로 구글시트에 업로드/갱신
 
 ## 1단계: 사이트 구조 확인 (사용자가 브라우저에서 직접, 1회)
 
-1. 크롬에서 `https://data.kleague.com/` 접속 → **데이터 센터 → 부가기록 → 기대득점 →
+1. 크롬에서 `https://data.kleague.com/` 접속 → **데이터센터 → 부가기록 → 기대득점 →
    선수별 기대득점** 메뉴를 순서대로 클릭합니다.
 2. 각 메뉴의 정확한 글자(공백 포함)가 스크립트의 `MENU_CLICK_PATH`와 같은지 확인합니다.
-   기본값은 `데이터 센터,부가기록,기대득점,선수별 기대득점` 입니다. 다르면
+   기본값은 `데이터센터,부가기록,기대득점,선수별 기대득점` 입니다. 다르면
    `.env`의 `MENU_CLICK_PATH`를 쉼표로 구분해 실제 텍스트로 바꿔주세요.
 3. **더 안정적인 방법을 원하면(선택, 권장):** F12 개발자도구 → Network 탭 → 상단
    필터를 **"Fetch/XHR"로 선택**한 뒤(전체가 아니라 XHR만 봐야 이미지/CSS가 안 섞입니다)
@@ -92,7 +92,7 @@ GOOGLE_SERVICE_ACCOUNT_FILE=service-account.json
 GOOGLE_SHEET_ID=여기에_스프레드시트_ID
 GOOGLE_WORKSHEET_NAME=서울이랜드_xG
 KLEAGUE_BASE_URL=https://data.kleague.com/
-MENU_CLICK_PATH=데이터 센터,부가기록,기대득점,선수별 기대득점
+MENU_CLICK_PATH=데이터센터,부가기록,기대득점,선수별 기대득점
 ```
 
 ## 4단계: 실행
@@ -123,7 +123,7 @@ python src/run_all.py
 
 **Variables (Settings → Secrets and variables → Actions → Variables):**
 - `KLEAGUE_BASE_URL` : `https://data.kleague.com/` (기본값 그대로 써도 됨)
-- `MENU_CLICK_PATH` : `데이터 센터,부가기록,기대득점,선수별 기대득점`
+- `MENU_CLICK_PATH` : `데이터센터,부가기록,기대득점,선수별 기대득점`
 - `GOOGLE_WORKSHEET_NAME` : 예) `서울이랜드_xG`
 
 실패하면 Actions 실행 결과의 "debug-screenshot" 아티팩트에서 그 시점 화면을

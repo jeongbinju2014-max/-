@@ -172,7 +172,7 @@ GOOGLE_SERVICE_ACCOUNT_FILE=service-account.json
 GOOGLE_SHEET_ID=7단계에서_복사한_스프레드시트_ID
 GOOGLE_WORKSHEET_NAME=서울이랜드_xG
 KLEAGUE_BASE_URL=https://data.kleague.com/
-MENU_CLICK_PATH=데이터 센터,부가기록,기대득점,선수별 기대득점
+MENU_CLICK_PATH=데이터센터,부가기록,기대득점,선수별 기대득점
 ```
 
 `GOOGLE_SHEET_ID=` 뒤에 7단계에서 복사한 긴 ID를 붙여넣고 저장하세요.
