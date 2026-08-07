@@ -7,7 +7,7 @@ load_dotenv()
 
 # README 1단계에서 브라우저로 확인한, "선수 기록 / 기대득점(xG)" 표가 있는 페이지 URL.
 KLEAGUE_STATS_URL = os.environ.get(
-    "KLEAGUE_STATS_URL", "https://portal.kleague.com/CHANGE_ME"
+    "KLEAGUE_STATS_URL", "https://data.kleague.com/CHANGE_ME"
 )
 
 # 사이트에는 팀별 필터가 없고 K리그2 전체 선수 표만 제공됨.
