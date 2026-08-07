@@ -20,6 +20,15 @@ MENU_CLICK_PATH = os.environ.get(
 # 메뉴 클릭 사이 대기 시간(ms). SPA 전환 애니메이션/데이터 로딩 시간을 감안.
 MENU_CLICK_WAIT_MS = int(os.environ.get("MENU_CLICK_WAIT_MS", "1500"))
 
+# "선수별 기대득점(xG)" 화면의 "대회명" 드롭다운 기본값이 K리그1이라,
+# 서울 이랜드 FC(K리그2 소속)를 보려면 K리그2로 바꿔줘야 한다.
+COMPETITION_NAME_CANDIDATES = os.environ.get(
+    "COMPETITION_NAME_CANDIDATES", "K리그2,K리그 2,하나은행 K리그2"
+).split(",")
+
+# 조건을 채운 뒤 눌러야 하는 검색 버튼 텍스트 후보.
+SEARCH_BUTTON_HINTS = os.environ.get("SEARCH_BUTTON_HINTS", "조회,검색").split(",")
+
 # 사이트에는 팀별 필터가 없고 K리그2 전체 선수 표만 제공됨.
 # 그 표에서 구단명(팀명) 열 값이 아래 후보 중 하나와 일치하는 행만 남긴다.
 # 사이트에 표시되는 정확한 표기로 맞춰주세요.

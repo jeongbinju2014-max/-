@@ -4,6 +4,9 @@
 사이트에는 팀별 필터가 없고 전체 선수 표만 제공되므로, 필요하면 페이지를
 넘겨가며(pagination) 모든 선수를 모은 뒤 마지막에 구단명으로 필터링한다.
 
+data.kleague.com은 화면 일부가 (i)frame 안에 내장되어 있을 수 있어서,
+메인 문서뿐 아니라 page.frames 전체를 뒤져 요소를 찾는다.
+
 주의: 정확한 페이지 URL / 표 헤더 / 페이지네이션 UI는 사이트를 직접 열어
 확인해야 한다. README.md의 "1단계: 사이트 구조 확인"을 먼저 진행할 것.
 """
@@ -16,38 +19,63 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sy
 import config
 
 
-def collect_clickable_texts(page: Page, limit: int = 80):
-    """현재 화면에서 클릭 가능해 보이는 요소들의 글자를 모아 디버깅에 쓴다."""
-    texts = []
-    seen = set()
-    for sel in ["nav a", "nav button", "header a", "header button",
-                "[role='menuitem']", "a", "button", "li"]:
+def find_text_in_frames(page: Page, label: str):
+    """모든 프레임(메인 문서 포함)을 뒤져 label 텍스트를 가진 첫 프레임/로케이터를 반환."""
+    for frame in page.frames:
         try:
-            elements = page.locator(sel).all()
+            locator = frame.get_by_text(label, exact=False)
+            if locator.count() > 0:
+                return frame, locator
         except Exception:
             continue
-        for el in elements:
+    return None, None
+
+
+def find_css_in_frames(page: Page, css: str):
+    """모든 프레임을 뒤져 css 셀렉터에 매칭되는 첫 프레임/로케이터를 반환."""
+    for frame in page.frames:
+        try:
+            locator = frame.locator(css)
+            if locator.count() > 0:
+                return frame, locator
+        except Exception:
+            continue
+    return None, None
+
+
+def collect_clickable_texts(page: Page, limit: int = 100):
+    """모든 프레임에서 클릭 가능해 보이는 요소들의 글자를 모아 디버깅에 쓴다."""
+    texts = []
+    seen = set()
+    for frame in page.frames:
+        for sel in ["nav a", "nav button", "header a", "header button",
+                    "[role='menuitem']", "a", "button", "li"]:
             try:
-                t = el.inner_text(timeout=300).strip()
+                elements = frame.locator(sel).all()
             except Exception:
                 continue
-            if t and 1 <= len(t) <= 20 and t not in seen:
-                seen.add(t)
-                texts.append(t)
-            if len(texts) >= limit:
-                return texts
+            for el in elements:
+                try:
+                    t = el.inner_text(timeout=300).strip()
+                except Exception:
+                    continue
+                if t and 1 <= len(t) <= 20 and t not in seen:
+                    seen.add(t)
+                    texts.append(t)
+                if len(texts) >= limit:
+                    return texts
     return texts
 
 
 def click_menu_path(page: Page, menu_path) -> bool:
-    """SPA 메뉴를 순서대로 클릭해 목표 화면까지 이동한다. 실패하면 False."""
+    """SPA/프레임 메뉴를 순서대로 클릭해 목표 화면까지 이동한다. 실패하면 False."""
     for label in menu_path:
         label = label.strip()
         if not label:
             continue
-        locator = page.get_by_text(label, exact=False)
-        if locator.count() == 0:
-            print(f"[오류] 메뉴 '{label}'을(를) 화면에서 찾지 못했습니다.")
+        frame, locator = find_text_in_frames(page, label)
+        if locator is None:
+            print(f"[오류] 메뉴 '{label}'을(를) 어느 프레임에서도 찾지 못했습니다.")
             return False
         try:
             locator.first.click()
@@ -63,11 +91,61 @@ def click_menu_path(page: Page, menu_path) -> bool:
     return True
 
 
+def select_competition(page: Page, hints) -> bool:
+    """'대회명' 드롭다운을 K리그2로 바꾼다. 기본값이 K리그1이라 필요함."""
+    for frame in page.frames:
+        try:
+            selects = frame.locator("select").all()
+        except Exception:
+            continue
+        for select_el in selects:
+            try:
+                options = select_el.locator("option").all_inner_texts()
+            except Exception:
+                continue
+            for hint in hints:
+                hint = hint.strip()
+                matches = [o for o in options if hint and hint in o]
+                if matches:
+                    try:
+                        select_el.select_option(label=matches[0])
+                        print(f"[정보] 대회명 선택: {matches[0]}")
+                        return True
+                    except Exception as e:
+                        print(f"[경고] 대회명 드롭다운 선택 실패: {e}")
+    print("[경고] 'K리그2' 대회명 드롭다운을 찾지 못했습니다. 기본값으로 계속 진행합니다.")
+    return False
+
+
+def click_search_button(page: Page, hints) -> bool:
+    """조건을 채운 뒤 '조회' 버튼을 눌러 결과 표를 로드한다."""
+    for hint in hints:
+        hint = hint.strip()
+        if not hint:
+            continue
+        frame, locator = find_css_in_frames(page, f"button:has-text('{hint}'), a:has-text('{hint}')")
+        if locator is None:
+            continue
+        try:
+            locator.first.click()
+            page.wait_for_timeout(1000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except PlaywrightTimeoutError:
+                pass
+            print(f"[정보] '{hint}' 버튼 클릭")
+            return True
+        except Exception as e:
+            print(f"[경고] '{hint}' 버튼 클릭 실패: {e}")
+    print("[경고] 조회/검색 버튼을 찾지 못했습니다.")
+    return False
+
+
 def click_next_page(page: Page) -> bool:
     """다음 페이지 버튼 클릭을 시도. 성공하면 True, 더 이상 없으면 False."""
     for hint in config.PAGINATION_NEXT_HINTS:
-        locator = page.locator(f"a:has-text('{hint}'), button:has-text('{hint}')")
-        if locator.count() == 0:
+        frame, locator = find_css_in_frames(page, f"a:has-text('{hint}'), button:has-text('{hint}')")
+        if locator is None:
             continue
         candidate = locator.first
         try:
@@ -84,17 +162,24 @@ def click_next_page(page: Page) -> bool:
 
 
 def find_stats_table(page: Page):
-    """헤더에 xG 관련 힌트가 포함된 표를 찾는다."""
-    tables = page.locator("table").all()
+    """모든 프레임에서 헤더에 xG 관련 힌트가 포함된 표를 찾는다."""
     xg_hints = config.COLUMN_HEADER_HINTS["xg"]
-    for table in tables:
-        header_texts = table.locator("th").all_inner_texts()
-        if any(any(hint in h for hint in xg_hints) for h in header_texts):
-            return table, header_texts
-    if tables:
-        # xG 열을 못 찾으면 가장 열이 많은 표를 fallback으로 사용
-        best = max(tables, key=lambda t: len(t.locator("th").all_inner_texts()))
-        return best, best.locator("th").all_inner_texts()
+    fallback = None
+    fallback_headers = None
+    for frame in page.frames:
+        try:
+            tables = frame.locator("table").all()
+        except Exception:
+            continue
+        for table in tables:
+            header_texts = table.locator("th").all_inner_texts()
+            if any(any(hint in h for hint in xg_hints) for h in header_texts):
+                return table, header_texts
+            if header_texts and (fallback is None or len(header_texts) > len(fallback_headers)):
+                fallback = table
+                fallback_headers = header_texts
+    if fallback is not None:
+        return fallback, fallback_headers
     return None, []
 
 
@@ -141,6 +226,20 @@ def filter_team(rows):
     return filtered
 
 
+def dump_debug(page: Page, reason: str):
+    page.screenshot(path="data/debug_screenshot.png", full_page=True)
+    texts = collect_clickable_texts(page)
+    with open("data/debug_menu_texts.txt", "w", encoding="utf-8") as f:
+        f.write(f"URL: {page.url}\nTitle: {page.title()}\n")
+        f.write(f"프레임 수: {len(page.frames)}\n\n")
+        f.write("\n".join(texts))
+    print(f"[오류] {reason}")
+    print(f"[정보] 페이지 제목: {page.title()} / 현재 URL: {page.url} / 프레임 수: {len(page.frames)}")
+    print("[정보] 현재 화면(모든 프레임)에서 인식된 클릭 가능한 글자들(이 목록을 그대로 복사해서 알려주세요):")
+    for t in texts:
+        print(f"  - {t}")
+
+
 def main():
     all_rows = []
     seen_signatures = set()
@@ -156,30 +255,17 @@ def main():
         page.wait_for_timeout(2000)
 
         if not click_menu_path(page, config.MENU_CLICK_PATH):
-            page.screenshot(path="data/debug_screenshot.png", full_page=True)
-            texts = collect_clickable_texts(page)
-            with open("data/debug_menu_texts.txt", "w", encoding="utf-8") as f:
-                f.write(f"URL: {page.url}\nTitle: {page.title()}\n\n")
-                f.write("\n".join(texts))
-            print(
-                "[오류] 메뉴 이동에 실패했습니다. data/debug_screenshot.png를 확인하거나 "
-                "config.MENU_CLICK_PATH를 실제 메뉴 텍스트에 맞게 수정해주세요."
-            )
-            print(f"[정보] 페이지 제목: {page.title()} / 현재 URL: {page.url}")
-            print("[정보] 현재 화면에서 인식된 클릭 가능한 글자들(이 목록을 그대로 복사해서 알려주세요):")
-            for t in texts:
-                print(f"  - {t}")
+            dump_debug(page, "메뉴 이동에 실패했습니다. config.MENU_CLICK_PATH를 실제 메뉴 텍스트에 맞게 수정해주세요.")
             browser.close()
             sys.exit(1)
+
+        select_competition(page, config.COMPETITION_NAME_CANDIDATES)
+        click_search_button(page, config.SEARCH_BUTTON_HINTS)
 
         for page_num in range(1, config.MAX_PAGES + 1):
             table, header_texts = find_stats_table(page)
             if table is None:
-                page.screenshot(path="data/debug_screenshot.png", full_page=True)
-                print(
-                    "[오류] 표를 찾지 못했습니다. data/debug_screenshot.png를 확인하거나 "
-                    "페이지 구조를 다시 확인해주세요."
-                )
+                dump_debug(page, "표를 찾지 못했습니다. 페이지 구조를 다시 확인해주세요.")
                 browser.close()
                 sys.exit(1)
 
