@@ -125,11 +125,56 @@ python src/run_all.py
 실패하면 Actions 실행 결과의 "debug-screenshot" 아티팩트에서 그 시점 화면을
 확인할 수 있습니다.
 
+## 6단계 (선택): MCP 서버로 사용하기 (Claude Desktop / Claude Code)
+
+`src/mcp_server.py`는 이 저장소의 파이프라인을 MCP 도구로 노출합니다.
+
+- `scrape_xg` : 데이터 수집 → `data/xg_players.csv` 생성
+- `update_sheet` : CSV를 구글시트에 반영
+- `run_pipeline` : 위 둘을 순서대로 실행
+- `read_latest_csv` : 최근 수집 결과 미리보기
+
+### 설치
+
+```bash
+pip install -r requirements.txt   # mcp 패키지 포함
+```
+
+### Claude Desktop 설정
+
+`claude_desktop_config.json`에 `mcp-config.example.json`을 참고해 서버를 등록하세요.
+`GOOGLE_SHEET_ID` 등은 `.env` 대신 이 설정의 `env`로 전달해도 됩니다.
+
+**Windows에서 내장(embeddable) Python을 쓰는 경우:**
+
+시스템에 Python을 따로 설치하지 않고 [python.org의 embeddable
+zip](https://www.python.org/downloads/windows/)만 풀어서 쓰는 환경(예:
+`C:\python-embed\`)이라면 아래처럼 준비합니다.
+
+1. embeddable zip을 `C:\python-embed`에 압축 해제
+2. 압축 안의 `python31x._pth` 파일을 열어 `#import site` 줄의 주석(`#`)을 제거
+   (pip과 일반 패키지 import를 쓰려면 필요)
+3. [get-pip.py](https://bootstrap.pypa.io/get-pip.py)를 받아 실행
+   ```cmd
+   C:\python-embed\python.exe get-pip.py
+   ```
+4. 저장소 의존성 설치
+   ```cmd
+   C:\python-embed\python.exe -m pip install -r requirements.txt
+   C:\python-embed\python.exe -m playwright install chromium
+   ```
+5. `claude_desktop_config.json`의 `command`를 `C:\\python-embed\\python.exe`로,
+   `args`는 `src\mcp_server.py`의 절대 경로로 지정 (`mcp-config.example.json` 참고)
+
+일반 Python 설치본이나 venv를 쓴다면 `command`를 해당 `python`/`python.exe` 경로로
+바꾸면 됩니다.
+
 ## 폴더 구조
 
 ```
 src/
   config.py       # 설정값 (URL, 메뉴 경로, 팀명, 열 이름 매핑)
+  mcp_server.py   # 파이프라인을 MCP 도구로 노출하는 서버
   scrape_xg.py    # Playwright로 K리그 포탈에서 xG 표 추출
   update_sheet.py # gspread로 구글시트 업데이트
   run_all.py      # scrape → update 순차 실행
@@ -137,6 +182,7 @@ data/
   xg_players.csv  # 최근 수집 결과 (실행 후 생성됨)
   debug_screenshot.png  # 실패 시 자동 저장되는 디버깅용 스크린샷
 .github/workflows/update-xg-sheet.yml
+mcp-config.example.json  # Claude Desktop/Code용 MCP 서버 설정 예시
 ```
 
 ## 문제가 생기면

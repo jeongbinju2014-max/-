@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "kleague-xg-updater": {
+      "command": "C:\\python-embed\\python.exe",
+      "args": ["C:\\path\\to\\repo\\src\\mcp_server.py"],
+      "env": {
+        "GOOGLE_SERVICE_ACCOUNT_FILE": "C:\\path\\to\\repo\\service-account.json",
+        "GOOGLE_SHEET_ID": "여기에_스프레드시트_ID",
+        "GOOGLE_WORKSHEET_NAME": "서울이랜드_xG",
+        "KLEAGUE_BASE_URL": "https://data.kleague.com/",
+        "MENU_CLICK_PATH": "데이터 센터,부가기록,기대득점,선수별 기대득점"
+      }
+    }
+  }
+}
