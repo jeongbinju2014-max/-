@@ -23,8 +23,17 @@ jobs:
 
       - name: Run scrape + sheet update
         env:
-          KLEAGUE_STATS_URL: ${{ secrets.KLEAGUE_STATS_URL }}
+          KLEAGUE_BASE_URL: ${{ vars.KLEAGUE_BASE_URL }}
+          MENU_CLICK_PATH: ${{ vars.MENU_CLICK_PATH }}
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
           GOOGLE_WORKSHEET_NAME: ${{ vars.GOOGLE_WORKSHEET_NAME }}
         run: python src/run_all.py
+
+      - name: Upload debug screenshot on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-screenshot
+          path: data/debug_screenshot.png
+          if-no-files-found: ignore

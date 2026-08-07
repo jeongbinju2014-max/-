@@ -16,6 +16,30 @@ from playwright.sync_api import Page, TimeoutError as PlaywrightTimeoutError, sy
 import config
 
 
+def click_menu_path(page: Page, menu_path) -> bool:
+    """SPA 메뉴를 순서대로 클릭해 목표 화면까지 이동한다. 실패하면 False."""
+    for label in menu_path:
+        label = label.strip()
+        if not label:
+            continue
+        locator = page.get_by_text(label, exact=False)
+        if locator.count() == 0:
+            print(f"[오류] 메뉴 '{label}'을(를) 화면에서 찾지 못했습니다.")
+            return False
+        try:
+            locator.first.click()
+        except Exception as e:
+            print(f"[오류] 메뉴 '{label}' 클릭 실패: {e}")
+            return False
+        page.wait_for_timeout(config.MENU_CLICK_WAIT_MS)
+        try:
+            page.wait_for_load_state("networkidle", timeout=10000)
+        except PlaywrightTimeoutError:
+            pass
+        print(f"[정보] 메뉴 클릭: {label}")
+    return True
+
+
 def click_next_page(page: Page) -> bool:
     """다음 페이지 버튼 클릭을 시도. 성공하면 True, 더 이상 없으면 False."""
     for hint in config.PAGINATION_NEXT_HINTS:
@@ -101,16 +125,29 @@ def main():
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
-        print(f"[정보] 접속: {config.KLEAGUE_STATS_URL}")
+        print(f"[정보] 접속: {config.KLEAGUE_BASE_URL}")
         try:
-            page.goto(config.KLEAGUE_STATS_URL, wait_until="networkidle", timeout=30000)
+            page.goto(config.KLEAGUE_BASE_URL, wait_until="networkidle", timeout=30000)
         except PlaywrightTimeoutError:
             print("[경고] networkidle 대기 타임아웃, 계속 진행합니다.")
+
+        if not click_menu_path(page, config.MENU_CLICK_PATH):
+            page.screenshot(path="data/debug_screenshot.png", full_page=True)
+            print(
+                "[오류] 메뉴 이동에 실패했습니다. data/debug_screenshot.png를 확인하거나 "
+                "config.MENU_CLICK_PATH를 실제 메뉴 텍스트에 맞게 수정해주세요."
+            )
+            browser.close()
+            sys.exit(1)
 
         for page_num in range(1, config.MAX_PAGES + 1):
             table, header_texts = find_stats_table(page)
             if table is None:
-                print("[오류] 표를 찾지 못했습니다. URL/페이지 구조를 다시 확인해주세요.")
+                page.screenshot(path="data/debug_screenshot.png", full_page=True)
+                print(
+                    "[오류] 표를 찾지 못했습니다. data/debug_screenshot.png를 확인하거나 "
+                    "페이지 구조를 다시 확인해주세요."
+                )
                 browser.close()
                 sys.exit(1)
 

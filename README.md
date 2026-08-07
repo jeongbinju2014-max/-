@@ -8,17 +8,28 @@
 
 이 코드는 초안입니다. `data.kleague.com`은 봇 차단(WAF)이 걸려 있어 이 코드를 만든
 환경에서는 어떤 방법으로도(직접 접속, 웹 조회 도구 모두 403) 실제 페이지에 접근하지
-못했습니다. 그래서 정확한 URL과 표(테이블) 구조를 **사용자가 직접 브라우저로 한 번
-확인**해야 합니다.
+못했습니다. 확인된 사실은 다음과 같습니다.
 
-아래 "1단계: 사이트 구조 확인"을 먼저 진행한 뒤, `src/config.py`의 값 몇 개만 채우면
-나머지는 그대로 동작하도록 만들었습니다.
+- 사이트는 **SPA**라서 "데이터 센터 → 부가기록 → 기대득점 → 선수별 기대득점" 메뉴를
+  눌러도 주소창 URL은 바뀌지 않는다 (사용자 확인).
+- 그래서 스크립트는 기본 URL(`https://data.kleague.com/`)로 접속한 뒤,
+  이 메뉴 경로를 **순서대로 자동 클릭**해서 화면에 도달하도록 만들어져 있다
+  (`src/config.py`의 `MENU_CLICK_PATH`).
+- 팀별 필터는 없고 K리그2 전체 선수 표만 나오므로, 전체 표를 다 모은 뒤
+  구단명(팀명) 열 값으로 서울 이랜드 FC만 걸러낸다.
+
+메뉴 텍스트나 표 헤더가 실제 사이트와 다르면 동작하지 않을 수 있으니,
+아래 "1단계: 사이트 구조 확인"을 먼저 진행해 `src/config.py`를 실제 값에 맞게
+조정해주세요.
 
 ## 전체 흐름
 
 ```
-K리그 데이터포탈 (Playwright로 브라우저 자동조작)
-        │  K리그2 전체 선수 xG 표를 페이지네이션 따라가며 전부 수집
+data.kleague.com 접속 (Playwright)
+        │  메뉴 자동 클릭: 데이터 센터 → 부가기록 → 기대득점 → 선수별 기대득점
+        ▼
+K리그2 전체 선수 xG 표를 페이지네이션 따라가며 전부 수집
+        │
         ▼
 구단명(팀명) 열이 "서울 이랜드 FC"인 행만 필터링 → data/xg_players.csv
         │
@@ -29,23 +40,23 @@ gspread(Google Sheets API)로 구글시트에 업로드/갱신
 (선택) GitHub Actions로 매일 자동 실행
 ```
 
-## 1단계: 사이트 구조 확인 (사용자가 브라우저에서 직접)
+## 1단계: 사이트 구조 확인 (사용자가 브라우저에서 직접, 1회)
 
 1. 크롬에서 `https://data.kleague.com/` 접속 → **데이터 센터 → 부가기록 → 기대득점 →
-   선수별 기대득점** 메뉴로 이동합니다. (K리그2 전체 선수 xG 표가 나오며,
-   **팀별 필터는 없습니다** — 서울 이랜드 FC 선수는 전체 표에서 "구단명" 열 값으로
-   직접 찾아야 합니다.)
-2. 그 페이지의 최종 URL을 그대로 `KLEAGUE_STATS_URL`로 사용합니다. (주소창 URL이 안 바뀌고
-   좌측 메뉴 클릭만으로 표가 갱신되는 SPA라면, `data.kleague.com/`에서 시작해 스크립트가
-   메뉴를 자동 클릭하도록 조정이 필요할 수 있습니다 — 아래 3번 확인 결과를 알려주세요.)
-3. **가장 중요:** F12 개발자도구 → Network 탭을 열어둔 채로 "선수별 기대득점" 메뉴를
-   클릭해서, XHR/Fetch 요청 중 xG 데이터를 담은 JSON 응답이 있는지 확인합니다.
-   `data.kleague.com`은 최신 SPA로 보여서 API 방식일 가능성이 높습니다 — JSON API
-   URL을 찾으면 표를 파싱하는 것보다 훨씬 간단하고 안정적으로 만들 수 있으니,
-   그 요청 URL(과 되면 응답 예시 1~2줄)을 알려주세요.
+   선수별 기대득점** 메뉴를 순서대로 클릭합니다.
+2. 각 메뉴의 정확한 글자(공백 포함)가 스크립트의 `MENU_CLICK_PATH`와 같은지 확인합니다.
+   기본값은 `데이터 센터,부가기록,기대득점,선수별 기대득점` 입니다. 다르면
+   `.env`의 `MENU_CLICK_PATH`를 쉼표로 구분해 실제 텍스트로 바꿔주세요.
+3. **더 안정적인 방법을 원하면(선택, 권장):** F12 개발자도구 → Network 탭 → 상단
+   필터를 **"Fetch/XHR"로 선택**한 뒤(전체가 아니라 XHR만 봐야 이미지/CSS가 안 섞입니다)
+   "선수별 기대득점" 메뉴를 클릭합니다. 목록에 새로 뜨는 요청 중 `.gif`/`.png`/`.css`/`.js`가
+   아닌 것(이름에 `player`, `expected`, `record`, `stat` 등이 들어간 것)을 찾아 클릭 →
+   오른쪽 "Response" 또는 "Preview" 탭에 선수 이름/xG 숫자가 담긴 JSON이 보이면, 그
+   요청 URL을 알려주세요. 있으면 지금의 "화면을 읽는" 방식보다 훨씬 간단하고 안정적인
+   API 직접 호출 방식으로 바꿔드릴 수 있습니다.
 4. 표가 여러 페이지로 나뉘어 있다면(페이지 하단에 1, 2, 3 ... 또는 "다음" 버튼) 스크립트가
-   "다음" 버튼을 자동으로 눌러가며 전체 페이지를 모두 수집한 뒤, 구단명으로 서울 이랜드
-   FC만 걸러냅니다.
+   자동으로 다음 페이지를 눌러가며 전체 데이터를 모읍니다. 그 버튼의 텍스트가 "다음"이
+   아니면 `config.PAGINATION_NEXT_HINTS`에 추가해주세요.
 5. 표(테이블)의 헤더 행에 있는 정확한 열 이름(예: "선수명", "구단명", "기대득점(xG)")을
    확인하고, 실제 표기가 다르면 `config.COLUMN_HEADER_HINTS`와
    `config.TEAM_NAME_CANDIDATES`(서울 이랜드가 사이트에 표기되는 정확한 이름)를 맞춰주세요.
@@ -76,7 +87,8 @@ playwright install chromium
 GOOGLE_SERVICE_ACCOUNT_FILE=service-account.json
 GOOGLE_SHEET_ID=여기에_스프레드시트_ID
 GOOGLE_WORKSHEET_NAME=서울이랜드_xG
-KLEAGUE_STATS_URL=여기에_1단계에서_확인한_URL
+KLEAGUE_BASE_URL=https://data.kleague.com/
+MENU_CLICK_PATH=데이터 센터,부가기록,기대득점,선수별 기대득점
 ```
 
 ## 4단계: 실행
@@ -92,33 +104,47 @@ python src/update_sheet.py   # csv를 구글시트에 반영
 python src/run_all.py
 ```
 
+메뉴 클릭이나 표 찾기에 실패하면 `data/debug_screenshot.png`가 자동 저장되니
+그 화면을 보고 `config.py`를 조정하거나 스크린샷을 공유해주세요.
+
 ## 5단계 (선택): 매일 자동 업데이트 — GitHub Actions
 
 `.github/workflows/update-xg-sheet.yml`이 이미 포함되어 있습니다.
-저장소 Settings → Secrets and variables → Actions 에서 아래 시크릿을 등록하면
+저장소 Settings → Secrets and variables → Actions 에서 아래 값을 등록하면
 매일 정해진 시간(기본 KST 09:00)에 자동으로 실행됩니다.
 
+**Secrets:**
 - `GOOGLE_SERVICE_ACCOUNT_JSON` : 서비스 계정 JSON 파일 내용 전체(문자열)
 - `GOOGLE_SHEET_ID` : 스프레드시트 ID
-- `KLEAGUE_STATS_URL` : 1단계에서 확인한 선수 기록 페이지 URL
+
+**Variables (Settings → Secrets and variables → Actions → Variables):**
+- `KLEAGUE_BASE_URL` : `https://data.kleague.com/` (기본값 그대로 써도 됨)
+- `MENU_CLICK_PATH` : `데이터 센터,부가기록,기대득점,선수별 기대득점`
+- `GOOGLE_WORKSHEET_NAME` : 예) `서울이랜드_xG`
+
+실패하면 Actions 실행 결과의 "debug-screenshot" 아티팩트에서 그 시점 화면을
+확인할 수 있습니다.
 
 ## 폴더 구조
 
 ```
 src/
-  config.py       # 설정값 (URL, 팀명, 열 이름 매핑)
+  config.py       # 설정값 (URL, 메뉴 경로, 팀명, 열 이름 매핑)
   scrape_xg.py    # Playwright로 K리그 포탈에서 xG 표 추출
   update_sheet.py # gspread로 구글시트 업데이트
   run_all.py      # scrape → update 순차 실행
 data/
   xg_players.csv  # 최근 수집 결과 (실행 후 생성됨)
+  debug_screenshot.png  # 실패 시 자동 저장되는 디버깅용 스크린샷
 .github/workflows/update-xg-sheet.yml
 ```
 
 ## 문제가 생기면
 
+- 메뉴 클릭이 실패하면(`메뉴 'X'을(를) 화면에서 찾지 못했습니다`): 실제 메뉴 글자를
+  확인해 `MENU_CLICK_PATH`를 맞춰주세요. `data/debug_screenshot.png`도 확인해보세요.
 - `scrape_xg.py`가 표를 못 찾으면: `COLUMN_HEADER_HINTS`(config.py)에 실제 사이트의
   헤더 텍스트를 추가해 보세요.
-- 팀 필터가 자동으로 안 눌리면: `select_team()` 함수의 셀렉터를 브라우저 개발자도구에서
-  확인한 실제 값으로 바꿔주세요 (예: `select` 태그의 `name` 속성, 또는 버튼의 텍스트).
 - 로그인/세션이 필요한 페이지라면: `scrape_xg.py`에 로그인 단계를 추가해야 합니다.
+- Network 탭에서 JSON API 요청을 찾았다면, 그 URL(과 요청 시 필요한 파라미터)을
+  알려주시면 훨씬 안정적인 API 직접 호출 방식으로 바꿔드릴 수 있습니다.

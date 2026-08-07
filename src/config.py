@@ -5,10 +5,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# README 1단계에서 브라우저로 확인한, "선수 기록 / 기대득점(xG)" 표가 있는 페이지 URL.
-KLEAGUE_STATS_URL = os.environ.get(
-    "KLEAGUE_STATS_URL", "https://data.kleague.com/CHANGE_ME"
-)
+# data.kleague.com은 SPA라 메뉴를 눌러도 주소창 URL이 바뀌지 않는다.
+# 그래서 기본 URL로 접속한 뒤, 아래 메뉴 경로를 순서대로 자동 클릭해서
+# "선수별 기대득점" 화면으로 들어간다.
+KLEAGUE_BASE_URL = os.environ.get("KLEAGUE_BASE_URL", "https://data.kleague.com/")
+
+# 데이터 센터 → 부가기록 → 기대득점 → 선수별 기대득점
+# 실제 메뉴 텍스트가 다르면(예: 띄어쓰기, "선수별 기대 득점" 등) 여기를 맞춰주세요.
+MENU_CLICK_PATH = os.environ.get(
+    "MENU_CLICK_PATH", "데이터 센터,부가기록,기대득점,선수별 기대득점"
+).split(",")
+
+# 메뉴 클릭 사이 대기 시간(ms). SPA 전환 애니메이션/데이터 로딩 시간을 감안.
+MENU_CLICK_WAIT_MS = int(os.environ.get("MENU_CLICK_WAIT_MS", "1500"))
 
 # 사이트에는 팀별 필터가 없고 K리그2 전체 선수 표만 제공됨.
 # 그 표에서 구단명(팀명) 열 값이 아래 후보 중 하나와 일치하는 행만 남긴다.
