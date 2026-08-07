@@ -14,7 +14,7 @@ KLEAGUE_BASE_URL = os.environ.get("KLEAGUE_BASE_URL", "https://data.kleague.com/
 # (실제 사이트 상단 메뉴 표기는 "데이터센터", 띄어쓰기 없음 - 사용자 스크린샷으로 확인됨)
 # 실제 메뉴 텍스트가 다르면(예: "선수별 기대 득점" 등) 여기를 맞춰주세요.
 MENU_CLICK_PATH = os.environ.get(
-    "MENU_CLICK_PATH", "데이터센터,부가기록,기대득점,선수별 기대득점"
+    "MENU_CLICK_PATH", "데이터센터,부가기록,기대득점,선수별 기대득점(xG)"
 ).split(",")
 
 # 메뉴 클릭 사이 대기 시간(ms). SPA 전환 애니메이션/데이터 로딩 시간을 감안.
