@@ -183,6 +183,42 @@ def find_stats_table(page: Page):
     return None, []
 
 
+def load_all_rows(page: Page, table, max_rounds: int = 40) -> int:
+    """가상 스크롤/무한 스크롤 표에 대응: 마지막 행을 계속 보이게 스크롤해서
+    더 이상 행이 늘어나지 않을 때까지(=전부 로드될 때까지) 반복한다.
+
+    실제로 GitHub Actions에서 조회는 성공했지만 272행만 잡히고(로컬은 384행)
+    서울 이랜드 선수가 하나도 안 걸린 사례가 있었음 — 스크롤을 안 해서
+    표 일부만 로드된 상태로 읽었던 것으로 추정됨.
+    """
+    stable_rounds = 0
+    last_count = -1
+    for _ in range(max_rounds):
+        rows = table.locator("tbody tr")
+        count = rows.count()
+        if count == 0:
+            break
+        try:
+            rows.last.scroll_into_view_if_needed(timeout=3000)
+        except Exception:
+            pass
+        page.wait_for_timeout(400)
+        try:
+            page.wait_for_load_state("networkidle", timeout=3000)
+        except PlaywrightTimeoutError:
+            pass
+        new_count = table.locator("tbody tr").count()
+        if new_count <= count:
+            stable_rounds += 1
+            last_count = new_count
+            if stable_rounds >= 3:
+                break
+        else:
+            stable_rounds = 0
+            last_count = new_count
+    return last_count
+
+
 def map_headers(header_texts):
     """실제 헤더 텍스트 -> 표준 필드명 매핑.
 
@@ -290,6 +326,9 @@ def main():
                 dump_debug(page, "표를 찾지 못했습니다. 페이지 구조를 다시 확인해주세요.")
                 browser.close()
                 sys.exit(1)
+
+            loaded_count = load_all_rows(page, table)
+            print(f"[정보] 스크롤 로딩 완료 (표에 실제로 로드된 행 수: {loaded_count})")
 
             header_mapping = map_headers(header_texts)
             rows = extract_rows(table, header_mapping, header_texts)
