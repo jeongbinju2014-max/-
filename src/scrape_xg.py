@@ -282,18 +282,33 @@ def extract_rows(table, header_mapping, header_texts):
 
 
 def filter_team(rows):
-    """구단명(team_name) 열 값으로 서울 이랜드 FC 소속 선수만 남긴다."""
-    if not rows or "team_name" not in rows[0]:
-        print("[경고] 구단명 열을 찾지 못해 팀 필터링을 건너뜁니다. "
-              "config.COLUMN_HEADER_HINTS['team_name']을 확인해주세요.")
-        return rows
+    """구단명(team_name) 열 값으로 서울 이랜드 FC 소속 선수만 남긴다.
+
+    구단 열을 못 찾거나 일치하는 팀이 없으면 None을 반환한다. 예전에는
+    이럴 때도 필터링 없이 전체 선수 데이터를 그대로 반환해서, 구단 열을
+    못 찾은 실행이 "성공"으로 끝나며 K리그2 전체 명단이 그대로 구글시트에
+    덮어써진 사고가 있었음. 이제는 실패로 취급해 아무것도 쓰지 않는다.
+    """
+    if not rows:
+        print("[오류] 표에서 추출된 선수 데이터가 없습니다.")
+        return None
+    if "team_name" not in rows[0]:
+        print("[오류] '구단' 열을 찾지 못했습니다. 지금 실제로 인식된 열 이름:")
+        for key in rows[0].keys():
+            print(f"  - {key}")
+        print("config.COLUMN_HEADER_HINTS['team_name']을 위 목록에 맞게 수정해주세요.")
+        return None
     filtered = [
         r for r in rows
         if any(team in r.get("team_name", "") for team in config.TEAM_NAME_CANDIDATES)
     ]
     if not filtered:
-        print("[경고] 서울 이랜드 FC와 일치하는 행이 없습니다. "
-              "config.TEAM_NAME_CANDIDATES의 표기를 실제 사이트 값에 맞게 조정해주세요.")
+        sample_teams = sorted({r.get("team_name", "") for r in rows})[:15]
+        print("[오류] 서울 이랜드 FC와 일치하는 행이 없습니다. 실제로 수집된 구단명 예시:")
+        for team in sample_teams:
+            print(f"  - {team}")
+        print("config.TEAM_NAME_CANDIDATES의 표기를 위 목록에 맞게 조정해주세요.")
+        return None
     return filtered
 
 
@@ -363,7 +378,7 @@ def main():
     rows = filter_team(all_rows)
 
     if not rows:
-        print("[오류] 서울 이랜드 FC 선수 데이터를 찾지 못했습니다.")
+        print("[오류] 서울 이랜드 FC 선수 데이터를 확보하지 못해 CSV/시트를 갱신하지 않고 종료합니다.")
         sys.exit(1)
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
