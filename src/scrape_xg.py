@@ -183,13 +183,17 @@ def find_stats_table(page: Page):
     return None, []
 
 
-def load_all_rows(page: Page, table, max_rounds: int = 40) -> int:
+def load_all_rows(page: Page, table, max_rounds: int = 80,
+                   stable_rounds_needed: int = 5, wait_ms: int = 800) -> int:
     """가상 스크롤/무한 스크롤 표에 대응: 마지막 행을 계속 보이게 스크롤해서
     더 이상 행이 늘어나지 않을 때까지(=전부 로드될 때까지) 반복한다.
 
-    실제로 GitHub Actions에서 조회는 성공했지만 272행만 잡히고(로컬은 384행)
-    서울 이랜드 선수가 하나도 안 걸린 사례가 있었음 — 스크롤을 안 해서
-    표 일부만 로드된 상태로 읽었던 것으로 추정됨.
+    실제로 GitHub Actions에서 조회는 성공했지만 272~289행만 잡히고(정상은
+    384~392행) 서울 이랜드 선수가 하나도 안 걸린 사례가 반복됐음. 스크롤 후
+    대기 시간이 짧아서(0.4초, 안정 판정 3회) 네트워크가 느린 날엔 아직
+    로딩 중인데 다 됐다고 오판했던 것으로 추정 — 대기 시간과 안정 판정
+    횟수를 늘리고, 안정된 것처럼 보여도 한 번 더 길게 기다렸다가 재확인하는
+    단계를 추가했다.
     """
     stable_rounds = 0
     last_count = -1
@@ -202,17 +206,26 @@ def load_all_rows(page: Page, table, max_rounds: int = 40) -> int:
             rows.last.scroll_into_view_if_needed(timeout=3000)
         except Exception:
             pass
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(wait_ms)
         try:
-            page.wait_for_load_state("networkidle", timeout=3000)
+            page.wait_for_load_state("networkidle", timeout=5000)
         except PlaywrightTimeoutError:
             pass
         new_count = table.locator("tbody tr").count()
         if new_count <= count:
             stable_rounds += 1
             last_count = new_count
-            if stable_rounds >= 3:
-                break
+            if stable_rounds >= stable_rounds_needed:
+                # 안정된 것처럼 보여도 한 번 더 길게 대기 후 재확인한다.
+                # (짧은 대기만으로는 배치 로딩 사이의 "잠깐 멈춤"을 완료로
+                # 오판할 수 있어, 마지막에 한 번 더 크게 여유를 준다.)
+                page.wait_for_timeout(2500)
+                confirm_count = table.locator("tbody tr").count()
+                if confirm_count <= new_count:
+                    last_count = confirm_count
+                    break
+                stable_rounds = 0
+                last_count = confirm_count
         else:
             stable_rounds = 0
             last_count = new_count
