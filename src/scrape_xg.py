@@ -93,6 +93,7 @@ def click_menu_path(page: Page, menu_path) -> bool:
 
 def select_dropdown_option(page: Page, hints, label: str) -> bool:
     """모든 프레임의 <select> 중 hints와 일치하는 옵션이 있는 것을 찾아 선택한다."""
+    seen_options = []
     for frame in page.frames:
         try:
             selects = frame.locator("select").all()
@@ -103,6 +104,7 @@ def select_dropdown_option(page: Page, hints, label: str) -> bool:
                 options = select_el.locator("option").all_inner_texts()
             except Exception:
                 continue
+            seen_options.append([o.strip() for o in options if o.strip()])
             for hint in hints:
                 hint = hint.strip()
                 matches = [o for o in options if hint and hint in o]
@@ -114,6 +116,10 @@ def select_dropdown_option(page: Page, hints, label: str) -> bool:
                     except Exception as e:
                         print(f"[경고] {label} 드롭다운 선택 실패: {e}")
     print(f"[경고] {label} 드롭다운을 찾지 못했습니다({', '.join(hints)}). 기본값으로 계속 진행합니다.")
+    if seen_options:
+        print(f"[정보] 현재 화면의 <select> 옵션들(참고용, {label} 진단):")
+        for opts in seen_options:
+            print(f"  - {opts}")
     return False
 
 
@@ -410,6 +416,14 @@ def main():
             sys.exit(1)
 
         select_year(page, config.SEASON_YEAR)
+        # 연도를 바꾸면 '대회명' 드롭다운의 옵션 목록이 AJAX로 다시 로딩되는
+        # 짧은 지연이 있는 것으로 보여, 곧바로 다음 선택을 시도하면 옵션이
+        # 아직 갱신 중이라 못 찾을 수 있다. 안정될 때까지 잠깐 기다린다.
+        page.wait_for_timeout(1200)
+        try:
+            page.wait_for_load_state("networkidle", timeout=5000)
+        except PlaywrightTimeoutError:
+            pass
         select_competition(page, config.COMPETITION_NAME_CANDIDATES)
         dump_filter_state(page)
         click_search_button(page, config.SEARCH_BUTTON_HINTS)
