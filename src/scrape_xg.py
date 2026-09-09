@@ -91,8 +91,8 @@ def click_menu_path(page: Page, menu_path) -> bool:
     return True
 
 
-def select_competition(page: Page, hints) -> bool:
-    """'대회명' 드롭다운을 K리그2로 바꾼다. 기본값이 K리그1이라 필요함."""
+def select_dropdown_option(page: Page, hints, label: str) -> bool:
+    """모든 프레임의 <select> 중 hints와 일치하는 옵션이 있는 것을 찾아 선택한다."""
     for frame in page.frames:
         try:
             selects = frame.locator("select").all()
@@ -109,12 +109,56 @@ def select_competition(page: Page, hints) -> bool:
                 if matches:
                     try:
                         select_el.select_option(label=matches[0])
-                        print(f"[정보] 대회명 선택: {matches[0]}")
+                        print(f"[정보] {label} 선택: {matches[0]}")
                         return True
                     except Exception as e:
-                        print(f"[경고] 대회명 드롭다운 선택 실패: {e}")
-    print("[경고] 'K리그2' 대회명 드롭다운을 찾지 못했습니다. 기본값으로 계속 진행합니다.")
+                        print(f"[경고] {label} 드롭다운 선택 실패: {e}")
+    print(f"[경고] {label} 드롭다운을 찾지 못했습니다({', '.join(hints)}). 기본값으로 계속 진행합니다.")
     return False
+
+
+def select_competition(page: Page, hints) -> bool:
+    """'대회명' 드롭다운을 K리그2로 바꾼다. 기본값이 K리그1이라 필요함."""
+    return select_dropdown_option(page, hints, "대회명")
+
+
+def select_year(page: Page, year: str) -> bool:
+    """'대회년도' 드롭다운을 지정한 연도로 맞춘다.
+
+    이전에는 이 값을 사이트 기본값에 그대로 맡겨서, 어떤 시즌 데이터를
+    보고 있는지 로그만으로는 알 수 없었다. 매번 실행 시점의 연도로
+    명시적으로 맞추고, 실제로 어떤 값이 선택됐는지 로그에 남긴다.
+    """
+    return select_dropdown_option(page, [year], "대회년도")
+
+
+def dump_filter_state(page: Page):
+    """현재 화면의 모든 <select> 드롭다운에서 선택된 값을 로그로 남긴다.
+
+    "대회년도가 2026이 맞는지" 같은 질문에 다음 실행 로그만 보고도 바로
+    답할 수 있도록 하기 위한 진단 기능.
+    """
+    print("[정보] 현재 필터 드롭다운 상태:")
+    seen = set()
+    for frame in page.frames:
+        try:
+            selects = frame.locator("select").all()
+        except Exception:
+            continue
+        for select_el in selects:
+            try:
+                selected = select_el.locator("option[selected]").all_inner_texts()
+                if not selected:
+                    value = select_el.input_value()
+                    label = select_el.locator(f"option[value='{value}']").inner_text()
+                    selected = [label]
+            except Exception:
+                continue
+            for s in selected:
+                s = s.strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    print(f"  - {s}")
 
 
 def click_search_button(page: Page, hints) -> bool:
@@ -284,10 +328,11 @@ def extract_rows(table, header_mapping, header_texts):
 def filter_team(rows):
     """구단명(team_name) 열 값으로 서울 이랜드 FC 소속 선수만 남긴다.
 
-    구단 열을 못 찾거나 일치하는 팀이 없으면 None을 반환한다. 예전에는
-    이럴 때도 필터링 없이 전체 선수 데이터를 그대로 반환해서, 구단 열을
-    못 찾은 실행이 "성공"으로 끝나며 K리그2 전체 명단이 그대로 구글시트에
-    덮어써진 사고가 있었음. 이제는 실패로 취급해 아무것도 쓰지 않는다.
+    구단 열을 못 찾거나, 일치하는 팀이 없거나, 다른 리그 구단으로 보이는
+    이름이 섞여 있으면 None을 반환한다. 예전에는 구단 열을 못 찾아도
+    필터링 없이 전체 선수 데이터를 그대로 반환해서, K리그2 전체 명단이
+    그대로 구글시트에 덮어써진 사고가 있었음. 이제는 이런 경우 전부
+    실패로 취급해 아무것도 쓰지 않는다.
     """
     if not rows:
         print("[오류] 표에서 추출된 선수 데이터가 없습니다.")
@@ -298,15 +343,34 @@ def filter_team(rows):
             print(f"  - {key}")
         print("config.COLUMN_HEADER_HINTS['team_name']을 위 목록에 맞게 수정해주세요.")
         return None
+
+    all_teams = sorted({r.get("team_name", "").strip() for r in rows})
+
+    flagged = [t for t in all_teams if any(marker in t for marker in config.UNEXPECTED_TEAM_MARKERS)]
+    if flagged:
+        print(f"[오류] K리그2가 아닌 다른 리그 구단으로 보이는 이름이 섞여 있습니다: {', '.join(flagged)}")
+        print("대회명(K리그2)/대회년도 선택이 실패했을 가능성이 있습니다. 실제로 수집된 구단명 전체:")
+        for t in all_teams:
+            print(f"  - {t}")
+        return None
+
+    if abs(len(all_teams) - config.EXPECTED_TEAM_COUNT) > 2:
+        print(f"[경고] 수집된 구단 수({len(all_teams)}개)가 예상 K리그2 구단 수"
+              f"({config.EXPECTED_TEAM_COUNT}개)와 차이가 큽니다. 실제로 수집된 구단명:")
+        for t in all_teams:
+            print(f"  - {t}")
+
+    # 포함(in) 대신 시작 일치(startswith)를 쓴다 — "서울"만으로 포함 매칭하면
+    # "FC서울"(K리그1)까지 걸릴 수 있는데, "FC서울"은 "서울"로 시작하지
+    # 않으므로 시작 일치는 안전하다.
     filtered = [
         r for r in rows
-        if any(team in r.get("team_name", "") for team in config.TEAM_NAME_CANDIDATES)
+        if any(r.get("team_name", "").strip().startswith(team) for team in config.TEAM_NAME_CANDIDATES)
     ]
     if not filtered:
-        sample_teams = sorted({r.get("team_name", "") for r in rows})[:15]
-        print("[오류] 서울 이랜드 FC와 일치하는 행이 없습니다. 실제로 수집된 구단명 예시:")
-        for team in sample_teams:
-            print(f"  - {team}")
+        print("[오류] 서울 이랜드 FC와 일치하는 행이 없습니다. 실제로 수집된 구단명 전체:")
+        for t in all_teams:
+            print(f"  - {t}")
         print("config.TEAM_NAME_CANDIDATES의 표기를 위 목록에 맞게 조정해주세요.")
         return None
     return filtered
@@ -345,7 +409,9 @@ def main():
             browser.close()
             sys.exit(1)
 
+        select_year(page, config.SEASON_YEAR)
         select_competition(page, config.COMPETITION_NAME_CANDIDATES)
+        dump_filter_state(page)
         click_search_button(page, config.SEARCH_BUTTON_HINTS)
 
         for page_num in range(1, config.MAX_PAGES + 1):
