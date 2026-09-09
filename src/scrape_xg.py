@@ -143,6 +143,10 @@ def dump_filter_state(page: Page):
 
     "대회년도가 2026이 맞는지" 같은 질문에 다음 실행 로그만 보고도 바로
     답할 수 있도록 하기 위한 진단 기능.
+
+    주의: HTML의 정적 `selected` 속성(option[selected])은 자바스크립트로
+    값을 바꿔도 갱신되지 않는다. 실시간 선택 상태를 보려면 DOM의
+    selectedIndex/options를 직접 읽어야 한다(el => el.options[el.selectedIndex]).
     """
     print("[정보] 현재 필터 드롭다운 상태:")
     seen = set()
@@ -153,18 +157,15 @@ def dump_filter_state(page: Page):
             continue
         for select_el in selects:
             try:
-                selected = select_el.locator("option[selected]").all_inner_texts()
-                if not selected:
-                    value = select_el.input_value()
-                    label = select_el.locator(f"option[value='{value}']").inner_text()
-                    selected = [label]
+                s = select_el.evaluate(
+                    "el => (el.options[el.selectedIndex] && el.options[el.selectedIndex].text) || ''"
+                )
             except Exception:
                 continue
-            for s in selected:
-                s = s.strip()
-                if s and s not in seen:
-                    seen.add(s)
-                    print(f"  - {s}")
+            s = (s or "").strip()
+            if s and s not in seen:
+                seen.add(s)
+                print(f"  - {s}")
 
 
 def click_search_button(page: Page, hints) -> bool:
